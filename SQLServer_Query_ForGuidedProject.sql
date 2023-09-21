@@ -1,0 +1,194 @@
+-- Pulling Up both Tables for the Project
+
+SELECT *
+FROM COVID_GuidedProject.dbo.CovidDeaths$
+
+SELECT *
+FROM COVID_GuidedProject.dbo.CovidVaccinations$
+
+-- Measuring Case Incidence (%) per Country on each day; Total Cases per Population
+
+SELECT iso_code, location, date,
+(total_cases/population)*100 AS Case_Rate
+FROM COVID_GuidedProject.dbo.CovidDeaths$
+
+-- Ordering Each Day by Number of New Cases and Their Respective Dates
+
+SELECT iso_code, location, new_cases, date
+FROM COVID_GuidedProject.dbo.CovidDeaths$
+ORDER BY 3, 4
+
+-- Comparing Total Deaths to Total Population
+
+SELECT iso_code, location, date, total_cases, total_deaths, population,
+(total_deaths/population)*100 AS DeathPerTotalPopulation
+FROM COVID_GuidedProject.dbo.CovidDeaths$
+
+-- Comparing Total Deaths to Total Cases & Excluding Unavailable Data
+
+SELECT iso_code, location, date, total_cases, total_deaths,
+(CAST(total_deaths as decimal)/CAST(total_cases as decimal))*100 AS DeathRate
+FROM COVID_GuidedProject.dbo.CovidDeaths$
+WHERE (CAST(total_deaths as decimal)/CAST(total_cases as decimal))*100 IS NOT NULL
+ORDER BY date
+
+-- Analyzing Death Rates in Home Country of USA
+
+SELECT iso_code, location, date, total_cases, total_deaths,
+(CAST(total_deaths as decimal)/CAST(total_cases as decimal))*100 AS DeathRate
+FROM COVID_GuidedProject.dbo.CovidDeaths$
+WHERE location = 'United States'
+ORDER BY date
+
+-- People Vaccinated per Total Vaccinations Performed Since They Were Available
+
+SELECT iso_code, location, date, people_vaccinated, total_vaccinations,
+(CAST(people_vaccinated as decimal)/CAST(total_vaccinations as decimal))*100 AS VaccinationsPerCapita
+FROM COVID_GuidedProject.dbo.CovidVaccinations$
+WHERE total_vaccinations NOT LIKE 0
+ORDER BY date
+
+-- Vaccinated People per Total Vaccinations Done in USA Since the Onset of COVID
+
+SELECT iso_code, location, date, people_vaccinated, total_vaccinations,
+(CAST(people_vaccinated as decimal)/CAST(total_vaccinations as decimal))*100 AS VaccinationsPerCapita
+FROM COVID_GuidedProject.dbo.CovidVaccinations$
+WHERE location = 'United States'
+ORDER BY date
+
+-- Looking Up Countries with the Highest Infection Rate by Population
+
+SELECT location, population, MAX(total_cases) AS HighestInfectionCount,
+MAX((total_cases/population))*100 AS Rate_InfectedPerPopulation
+FROM COVID_GuidedProject.dbo.CovidDeaths$
+GROUP BY location, population
+ORDER BY Rate_InfectedPerPopulation DESC
+
+-- Arranging Countries by Death Count per Population
+
+SELECT location, population, MAX(CAST(total_deaths AS int)) AS TotalDeathCount,
+MAX(CAST(total_deaths AS int)/(population))*100 AS TotalDeathPercentage
+FROM COVID_GuidedProject.dbo.CovidDeaths$
+WHERE continent IS NOT NULL
+GROUP BY location, population
+ORDER BY TotalDeathPercentage DESC
+
+-- Arranging Countries by Death Chance per Case
+
+SELECT location, MAX(total_cases) AS CaseTotal,  MAX(CAST(total_deaths AS int)) AS TotalDeathCount,
+MAX(CAST(total_deaths AS int))/SUM(new_cases)*100 AS DeathRatePerCase
+FROM COVID_GuidedProject.dbo.CovidDeaths$
+WHERE continent IS NOT NULL
+GROUP BY location
+ORDER BY DeathRatePerCase DESC
+
+
+-- Data by CONTINENT
+
+SELECT date, SUM(new_cases)
+FROM COVID_GuidedProject.dbo.CovidDeaths$
+WHERE continent IS NOT NULL
+GROUP BY date
+ORDER BY 1, 2
+
+-- Dissecting Death Count per Population, BY CONTINENT
+
+SELECT continent, MAX(CAST(population AS int)) AS Population,
+MAX(CAST(total_deaths AS int)) AS TotalDeathCount
+FROM COVID_GuidedProject.dbo.CovidDeaths$
+WHERE continent IS NOT NULL
+GROUP BY continent
+ORDER BY TotalDeathCount DESC
+
+-- Excluding Recording with ZERO New Cases, Death Chances per Infection
+
+SELECT date, SUM(new_cases) AS TotalCases, SUM(CAST(new_deaths AS int)) AS TotalDeaths, 
+SUM(CAST(new_deaths AS int))/SUM(new_cases)*100 AS DeathRatePerCase
+FROM COVID_GuidedProject.dbo.CovidDeaths$
+WHERE continent IS NOT NULL
+AND new_cases NOT LIKE '0'
+GROUP BY date
+ORDER BY 1, 2
+
+-- TOTAL CASES VS TOTAL DEATH COUNT, OVERALL - JAN 2020 to (NOW) SEP 2023
+
+SELECT SUM(new_cases) AS TotalCases, SUM(CAST(new_deaths AS int)) AS TotalDeaths,
+SUM(CAST(new_deaths AS int))/SUM(new_cases)*100 AS TotalDeathRate
+FROM COVID_GuidedProject.dbo.CovidDeaths$
+WHERE continent IS NOT NULL
+ORDER BY 1, 2
+
+
+-- Joining the 2 Main Tables
+
+SELECT *
+FROM COVID_GuidedProject.dbo.CovidDeaths$ dth
+JOIN COVID_GuidedProject.dbo.CovidVaccinations$ vcn
+On dth.location = vcn.location
+AND dth.date = vcn.date
+
+-- Total Population VS Vaccinations
+
+SELECT dth.location, dth.date, dth.population AS TotalPopulation, vcn.new_vaccinations AS NewVaccinations
+FROM COVID_GuidedProject.dbo.CovidDeaths$ dth
+JOIN COVID_GuidedProject.dbo.CovidVaccinations$ vcn
+On dth.location = vcn.location
+AND dth.date = vcn.date
+WHERE dth.continent IS NOT NULL
+ORDER BY dth.location, dth.date
+
+-- Total Population And Vaccinations Done Per Day
+
+SELECT dth.location, dth.date, dth.population AS TotalPopulation, vcn.new_vaccinations AS NewVaccinations,
+(SUM(CONVERT(bigint, vcn.new_vaccinations)) OVER (Partition By dth.location ORDER BY dth.location, dth.date)) AS TotalVaccinations
+FROM COVID_GuidedProject.dbo.CovidDeaths$ dth
+JOIN COVID_GuidedProject.dbo.CovidVaccinations$ vcn
+On dth.location = vcn.location
+AND dth.date = vcn.date
+WHERE dth.continent IS NOT NULL
+ORDER BY dth.location, dth.date
+
+-- Overall Average Vaccination Rate by Country, Compared with Death Rate per Case as well
+
+SELECT dth.location, dth.population AS TotalPopulation,
+SUM(CAST(vcn.new_vaccinations AS bigint)) AS TotalVaccinations,
+(SUM(CAST(vcn.new_vaccinations AS bigint))/(dth.population))*100 AS VaccinationRate,
+SUM(CAST(dth.new_deaths AS int))/SUM(dth.new_cases)*100 AS DeathRatePerCase
+FROM COVID_GuidedProject.dbo.CovidDeaths$ dth
+JOIN COVID_GuidedProject.dbo.CovidVaccinations$ vcn
+On dth.location = vcn.location
+AND dth.date = vcn.date
+WHERE dth.continent IS NOT NULL
+AND dth.new_cases NOT LIKE '0'
+GROUP BY dth.location, dth.population
+ORDER BY VaccinationRate DESC
+
+
+-- Going Further: Using CTE to Perform Calculation for Rolling Vaccination Rates by Population
+
+With VaccVSPop (location, date, TotalPopulation, NewVaccinations, TotalVaccinations)
+AS
+(
+SELECT dth.location, dth.date, dth.population AS TotalPopulation, vcn.new_vaccinations AS NewVaccinations,
+(SUM(CONVERT(bigint, vcn.new_vaccinations)) OVER (Partition By dth.location ORDER BY dth.location, dth.date)) AS TotalVaccinations
+FROM COVID_GuidedProject.dbo.CovidDeaths$ dth
+JOIN COVID_GuidedProject.dbo.CovidVaccinations$ vcn
+On dth.location = vcn.location
+AND dth.date = vcn.date
+WHERE dth.continent IS NOT NULL
+)
+SELECT *, (TotalVaccinations/TotalPopulation)*100 AS RollingVaccinationRate
+FROM VaccVSPop
+
+
+-- Creating View for Future Visualizations
+
+CREATE VIEW PercentPopulationVaccinated AS
+SELECT dth.location, dth.date, dth.population AS TotalPopulation, vcn.new_vaccinations AS NewVaccinations,
+(SUM(CONVERT(bigint, vcn.new_vaccinations)) OVER (Partition By dth.location ORDER BY dth.location, dth.date)) TotalVaccinations
+FROM COVID_GuidedProject.dbo.CovidDeaths$ dth
+JOIN COVID_GuidedProject.dbo.CovidVaccinations$ vcn
+On dth.location = vcn.location
+AND dth.date = vcn.date
+WHERE dth.continent IS NOT NULL
+-- ORDER BY dth.location, dth.date
