@@ -1,3 +1,7 @@
+/***********************************************
+** First SQL Project on Microsoft SQL Server: Analyzing COVID-19
+***********************************************/
+
 -- Pulling Up both Tables for the Project
 
 SELECT *
